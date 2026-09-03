@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "next build && serwist build serwist.config.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
@@ -27,11 +28,14 @@
     }
   },
   "devDependencies": {
+    "@serwist/cli": "^9.5.12",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.4",
+    "serwist": "^9.5.12",
     "typescript": "^6.0.3"
   }
 }

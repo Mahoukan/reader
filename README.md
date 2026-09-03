@@ -1,6 +1,6 @@
-# Local Leaf Reader — Stage One
+# Local Ebook Reader
 
-Local Leaf Reader is a self-hosted, browser-based prototype for opening EPUB ebooks, PDF documents, and CBZ comics from your device. Stage One deliberately focuses on the reading experience: there are no accounts, uploads, libraries, or server-side book processing.
+Local Ebook Reader is a private, browser-based EPUB, PDF, and CBZ reader with a local-folder library, private browser imports, installation, and offline application support. It has no accounts, uploads, or server-side book processing.
 
 ## Prerequisites
 
@@ -23,7 +23,21 @@ Useful technical checks:
 npm run lint
 npm run typecheck
 npm run build
+npm run build:pages
 ```
+
+`npm run build:pages` creates the static GitHub Pages site in `out/` and then generates `out/sw.js` with Serwist.
+
+## Deploy to GitHub Pages
+
+1. Create a GitHub repository, or connect this folder to an existing repository.
+2. Commit the project and push it to the `main` branch.
+3. In GitHub, open **Settings → Pages** and select **GitHub Actions** as the source.
+4. Configure `reader-test.arulmozhis.com` as the Pages custom domain.
+5. At the DNS provider for `arulmozhis.com`, create a CNAME record for `reader-test` pointing to the repository owner’s GitHub Pages hostname, such as `OWNER.github.io`.
+6. Wait for GitHub Pages to validate the DNS record and make HTTPS available.
+
+The deployed website is publicly accessible, but books are not published with it. Book contents, folder handles, IndexedDB catalogue data, and OPFS imports stay inside each visitor’s browser and are not uploaded. Authentication and a shared server-backed library will require a later deployment through Coolify or another server host.
 
 ## Supported formats
 
@@ -62,7 +76,7 @@ Left Arrow and Right Arrow navigate when possible. Escape closes the current boo
 
 ## Privacy
 
-Selected books never leave the browser. This project has no upload endpoint or API route. Files are read through browser APIs, held only in memory, and released when the book is closed or replaced. EPUB content is isolated from the parent application and book-provided scripts are not allowed to run.
+Books never leave the browser. This project has no upload endpoint or API route. Connected books remain in their original folder, while imported books are copied to that browser’s private OPFS storage and catalogued in IndexedDB. EPUB content is isolated from the parent application and book-provided scripts are not allowed to run.
 
 ## Manual testing checklist
 
@@ -87,4 +101,4 @@ Selected books never leave the browser. This project has no upload endpoint or A
 
 ## Postponed until later stages
 
-Authentication, user accounts, a book library, collections, server storage, annotations, reading-progress persistence, appearance customisation, PWA/offline management, deployment configuration, and cloud storage are intentionally out of scope for Stage One.
+Authentication, user accounts, shared server storage, collections, annotations, reading-progress persistence, native packaging, and cloud storage remain out of scope.
