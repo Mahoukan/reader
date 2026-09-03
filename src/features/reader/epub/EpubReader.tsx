@@ -22,7 +22,7 @@ interface SerializableSection {
 }
 
 const CONTENT_POLICY =
-  "default-src 'none'; img-src blob: data:; style-src 'unsafe-inline' blob: data:; font-src blob: data:; media-src blob: data:";
+  "default-src 'none'; img-src blob: data:; style-src 'unsafe-inline' blob: data:; font-src 'self' blob: data:; media-src blob: data:";
 
 function addContentPolicy(output: string, section: SerializableSection) {
   const policy = `<meta http-equiv="Content-Security-Policy" content="${CONTENT_POLICY}" />`;
@@ -44,6 +44,7 @@ const FONT_STACKS: Record<Exclude<EpubSettings["fontFamily"], "publisher">, stri
   georgia: "Georgia, 'Times New Roman', serif",
   arial: "Arial, Helvetica, sans-serif",
   verdana: "Verdana, Geneva, sans-serif",
+  "open-dyslexic": "OpenDyslexic, Verdana, Arial, sans-serif",
 };
 
 const EPUB_APPEARANCE_STYLE_ID = "ebook-reader-epub-appearance";
@@ -53,26 +54,67 @@ interface BufferedRenditionOptions extends RenditionOptions {
   offset: number;
 }
 
-function epubAppearanceCss(settings: EpubSettings) {
+function epubAppearanceCss(settings: EpubSettings, fontAssetRoot: string, reduceMotion: boolean) {
+  const openDyslexicFaces = settings.fontFamily === "open-dyslexic"
+    ? `
+      @font-face {
+        font-family: "OpenDyslexic";
+        src: url("${fontAssetRoot}/opendyslexic-latin-400-normal.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "OpenDyslexic";
+        src: url("${fontAssetRoot}/opendyslexic-latin-700-normal.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+      }`
+    : "";
   const fontRule = settings.fontFamily === "publisher"
     ? ""
     : `body, body * { font-family: ${FONT_STACKS[settings.fontFamily]} !important; }\npre, code, kbd, samp { font-family: monospace !important; }`;
   const alignmentRule = settings.textAlignment === "publisher"
     ? ""
     : `p { text-align: ${settings.textAlignment} !important; }`;
+  const highContrastLinkRule = settings.theme === "high-contrast-light" || settings.theme === "high-contrast-dark"
+    ? "text-decoration-thickness: max(2px, 0.12em) !important; text-underline-offset: 0.16em !important;"
+    : "";
+  const highContrastContentRule = settings.theme === "high-contrast-light" || settings.theme === "high-contrast-dark"
+    ? "body *, body *::before, body *::after { background-color: transparent !important; }"
+    : "";
+  const reducedMotionRule = reduceMotion
+    ? `
+      html { scroll-behavior: auto !important; }
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation: none !important;
+        transition: none !important;
+      }`
+    : "";
 
   return `
-    html, body {
+    ${openDyslexicFaces}
+    html {
+      width: 100% !important;
       max-width: 100% !important;
       overflow-x: hidden !important;
+    }
+    html, body {
       color: ${settings.textColor} !important;
       background: ${settings.backgroundColor} !important;
     }
     body, body * {
       color: ${settings.textColor} !important;
       -webkit-text-fill-color: ${settings.textColor} !important;
+      font-weight: ${settings.fontWeight} !important;
+      letter-spacing: ${settings.letterSpacing}em !important;
+      word-spacing: ${settings.wordSpacing}em !important;
     }
     body {
+      width: 100% !important;
+      max-width: ${settings.columnWidth}px !important;
       min-width: 0 !important;
       margin: 0 auto !important;
       padding: clamp(1.25rem, 5vw, 3.25rem) !important;
@@ -82,6 +124,7 @@ function epubAppearanceCss(settings: EpubSettings) {
       overflow-wrap: anywhere;
       word-break: normal;
     }
+    b, strong, h1, h2, h3, h4, h5, h6 { font-weight: bolder !important; }
     body * { max-width: 100%; }
     p {
       margin-block: 0 ${settings.paragraphSpacing}rem !important;
@@ -92,13 +135,16 @@ function epubAppearanceCss(settings: EpubSettings) {
     img, svg, video, canvas { max-width: 100% !important; height: auto !important; }
     pre { max-width: 100% !important; white-space: pre-wrap !important; overflow-wrap: anywhere; }
     table { max-width: 100% !important; overflow-wrap: anywhere; }
-    a { color: inherit !important; text-decoration: underline !important; }
+    a { color: inherit !important; text-decoration: underline !important; ${highContrastLinkRule} }
+    a:focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
+    ${highContrastContentRule}
     ${fontRule}
     ${alignmentRule}
+    ${reducedMotionRule}
   `;
 }
 
-function applyEpubSettingsToContent(contents: Contents, settings: EpubSettings) {
+function applyEpubSettingsToContent(contents: Contents, settings: EpubSettings, reduceMotion: boolean) {
   const document = contents.document;
   let style = document.getElementById(EPUB_APPEARANCE_STYLE_ID) as HTMLStyleElement | null;
   if (!style) {
@@ -106,7 +152,8 @@ function applyEpubSettingsToContent(contents: Contents, settings: EpubSettings) 
     style.id = EPUB_APPEARANCE_STYLE_ID;
     document.head.appendChild(style);
   }
-  style.textContent = epubAppearanceCss(settings);
+  const fontAssetRoot = new URL("/fonts/opendyslexic", window.location.origin).href.replace(/\/$/, "");
+  style.textContent = epubAppearanceCss(settings, fontAssetRoot, reduceMotion);
 
   if (style.dataset.textColor === settings.textColor) return;
   style.dataset.textColor = settings.textColor;
@@ -124,9 +171,9 @@ function applyEpubSettingsToContent(contents: Contents, settings: EpubSettings) 
   });
 }
 
-function applyEpubSettingsToLoadedContent(rendition: Rendition, settings: EpubSettings) {
+function applyEpubSettingsToLoadedContent(rendition: Rendition, settings: EpubSettings, reduceMotion: boolean) {
   const loadedContents = rendition.getContents() as unknown as Contents[];
-  loadedContents.forEach((contents) => applyEpubSettingsToContent(contents, settings));
+  loadedContents.forEach((contents) => applyEpubSettingsToContent(contents, settings, reduceMotion));
 }
 
 export function EpubReader({ source, onClose }: EpubReaderProps) {
@@ -135,6 +182,10 @@ export function EpubReader({ source, onClose }: EpubReaderProps) {
   const renditionRef = useRef<Rendition | null>(null);
   const { settings, setSettings, resetSettings } = useEpubSettings();
   const settingsRef = useRef<EpubSettings>(settings);
+  const [devicePrefersReducedMotion, setDevicePrefersReducedMotion] = useState(false);
+  const reduceMotion = settings.motionPreference === "reduce"
+    || (settings.motionPreference === "device" && devicePrefersReducedMotion);
+  const reduceMotionRef = useRef(reduceMotion);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toc, setToc] = useState<Array<NavItem & { depth: number }>>([]);
@@ -166,10 +217,25 @@ export function EpubReader({ source, onClose }: EpubReaderProps) {
   }, []);
 
   useEffect(() => {
+    if (settings.motionPreference !== "device") return;
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPreference = () => setDevicePrefersReducedMotion(mediaQuery.matches);
+    syncPreference();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncPreference);
+      return () => mediaQuery.removeEventListener("change", syncPreference);
+    }
+    mediaQuery.addListener(syncPreference);
+    return () => mediaQuery.removeListener(syncPreference);
+  }, [settings.motionPreference]);
+
+  useEffect(() => {
     settingsRef.current = settings;
+    reduceMotionRef.current = reduceMotion;
     const rendition = renditionRef.current;
-    if (rendition) applyEpubSettingsToLoadedContent(rendition, settings);
-  }, [settings]);
+    if (rendition) applyEpubSettingsToLoadedContent(rendition, settings, reduceMotion);
+  }, [settings, reduceMotion]);
 
   async function toggleFullscreen() {
     const fullscreenRoot = fullscreenRootRef.current;
@@ -216,7 +282,7 @@ export function EpubReader({ source, onClose }: EpubReaderProps) {
         renditionRef.current = rendition;
 
         onContent = (contents: Contents) => {
-          applyEpubSettingsToContent(contents, settingsRef.current);
+          applyEpubSettingsToContent(contents, settingsRef.current, reduceMotionRef.current);
           contents.document.querySelectorAll("a[href]").forEach((link) => {
             const href = link.getAttribute("href") ?? "";
             if (/^(?:https?:)?\/\//i.test(href)) link.removeAttribute("href");
@@ -277,7 +343,6 @@ export function EpubReader({ source, onClose }: EpubReaderProps) {
   const epubSurfaceStyle = {
     "--epub-background": settings.backgroundColor,
     "--epub-text": settings.textColor,
-    "--epub-column-width": `${settings.columnWidth}px`,
   } as CSSProperties;
 
   const sidebar = toc.length > 0 ? (
@@ -301,7 +366,7 @@ export function EpubReader({ source, onClose }: EpubReaderProps) {
   ) : undefined;
 
   return (
-    <div ref={fullscreenRootRef} className="epub-fullscreen-root" style={epubSurfaceStyle}>
+    <div ref={fullscreenRootRef} className="epub-fullscreen-root" data-reduce-motion={reduceMotion ? "true" : undefined} style={epubSurfaceStyle}>
       <ReaderShell
         source={source}
         onClose={onClose}

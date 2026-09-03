@@ -1,0 +1,9 @@
+OpenDyslexic webfonts
+
+Source package: @fontsource/opendyslexic 5.3.0
+Package homepage: https://fontsource.org/fonts/opendyslexic
+Font version reported by the package: v0.910.12
+
+Only the Latin normal-style WOFF2 files for weights 400 and 700 are bundled.
+See LICENSE.txt in this directory for the SIL Open Font License 1.1 and
+copyright information.
